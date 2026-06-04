@@ -16,10 +16,27 @@ const reportsRoutes = require('./routes/reportsRoutes');
 const app = express();
 const port = process.env.PORT || 3000;
 
+const supabase = require('./config/supabaseClient');
+
 // Middleware dasar
 app.use(cors());
 app.use(express.json()); // Mem-parsing body request berbasis JSON
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Middleware untuk memvalidasi konfigurasi Supabase
+app.use((req, res, next) => {
+  // Izinkan rute health check '/' tanpa pengecekan database
+  if (req.path === '/' || req.path === '/api' || req.path === '/api/') {
+    return next();
+  }
+  if (!supabase) {
+    return res.status(500).json({
+      success: false,
+      message: 'Server Database configuration is missing. Please configure SUPABASE_URL and SUPABASE_ANON_KEY environment variables in Vercel settings.'
+    });
+  }
+  next();
+});
 
 // Routes
 app.use('/api/auth', authRoutes);           // ← PUBLIC: Login & Register
