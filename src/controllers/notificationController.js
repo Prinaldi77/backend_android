@@ -169,6 +169,59 @@ const notificationController = {
       console.error(err);
       return res.status(500).json({ success: false, message: 'Internal server error', data: null });
     }
+  },
+
+  // POST /api/notifications/broadcast (Pembina/Admin only)
+  broadcastNotification: async (req, res) => {
+    try {
+      const { title, message, category } = req.body;
+      const adminId = req.user.sub;
+
+      if (!title || !message) {
+        return res.status(400).json({ success: false, message: 'title and message are required', data: null });
+      }
+
+      const { data: users, error: fetchErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'SISWA')
+        .eq('is_active', true);
+
+      if (fetchErr) {
+        return res.status(500).json({ success: false, message: fetchErr.message, data: null });
+      }
+
+      if (!users || users.length === 0) {
+        return res.status(200).json({ success: true, message: 'Tidak ada siswa aktif untuk dikirimi notifikasi', data: [] });
+      }
+
+      const notificationsPayload = users.map(u => ({
+        user_id: u.id,
+        title,
+        message,
+        category: category || 'Umum'
+      }));
+
+      const { data, error: insertErr } = await supabase
+        .from('notifications')
+        .insert(notificationsPayload)
+        .select();
+
+      if (insertErr) {
+        return res.status(500).json({ success: false, message: insertErr.message, data: null });
+      }
+
+      await logAudit(adminId, 'Broadcast Notification', req.ip, `Broadcasted notification: ${title} to all active students`);
+
+      return res.status(201).json({
+        success: true,
+        message: `Berhasil mengirim notifikasi ke ${users.length} siswa`,
+        data: data.map(n => formatNotification(n))
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ success: false, message: 'Internal server error', data: null });
+    }
   }
 };
 

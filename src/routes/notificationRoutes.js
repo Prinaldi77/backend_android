@@ -19,4 +19,7 @@ router.put('/:id/read', authMiddleware, notificationController.markAsRead);
 // Send notification (Pembina only)
 router.post('/send', authMiddleware, requireRole(['PEMBINA', 'ADMIN']), notificationController.sendNotification);
 
+// Broadcast notification to all students (Pembina only)
+router.post('/broadcast', authMiddleware, requireRole(['PEMBINA', 'ADMIN']), notificationController.broadcastNotification);
+
 module.exports = router;
