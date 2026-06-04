@@ -72,6 +72,10 @@ app.get('/', (req, res) => {
 });
 
 // Menjalankan server
-app.listen(port, () => {
-  console.log(`✅ Scoutify Server is running on http://localhost:${port}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(port, () => {
+    console.log(`✅ Scoutify Server is running on http://localhost:${port}`);
+  });
+}
+
+module.exports = app;
