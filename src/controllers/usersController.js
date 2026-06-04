@@ -41,7 +41,33 @@ const usersController = {
         return res.status(500).json({ success: false, message: error.message, data: null });
       }
 
-      const formatted = data.map(u => formatProfile(u));
+      const formatted = data.map(u => {
+        let hash = 0;
+        for (let i = 0; i < u.id.length; i++) {
+          hash = (hash << 5) - hash + u.id.charCodeAt(i);
+          hash |= 0;
+        }
+        const intId = Math.abs(hash);
+        return {
+          id: intId,
+          uuid: u.id,
+          nama: u.name,
+          name: u.name,
+          email: u.email,
+          phone: u.phone || '',
+          nisn: u.nomor_induk || '0000000000',
+          nomorInduk: u.nomor_induk || '0000000000',
+          jabatan: u.jabatan || u.rank || 'ANGGOTA',
+          rank: u.rank || 'Penggalang',
+          regu: u.regu || 'Garuda',
+          foto_url: u.avatar || null,
+          fotoUrl: u.avatar || null,
+          avatar: u.avatar || null,
+          status: u.is_active ? 'Aktif' : 'Non-aktif',
+          isActive: u.is_active,
+          role: u.role
+        };
+      });
 
       return res.status(200).json({
         success: true,
@@ -109,15 +135,22 @@ const usersController = {
         id: intId,
         uuid: user.id,
         name: user.name,
+        nama: user.name,
         rank: user.rank || 'Penggalang',
         nisn: user.nomor_induk || '0000000000',
+        nomorInduk: user.nomor_induk || '0000000000',
         foto_url: user.avatar || null,
-        status: user.is_active ? 'Online' : 'Offline',
+        fotoUrl: user.avatar || null,
+        avatar: user.avatar || null,
+        status: user.is_active ? 'Aktif' : 'Non-aktif',
+        isActive: user.is_active,
         birthInfo: 'Bandung, 1 Januari 2010', // Default mock info
         phone: user.phone || '',
         address: 'Bandung, Indonesia',
         bloodType: 'O',
         regu: user.regu || 'Garuda',
+        jabatan: user.jabatan || user.rank || 'ANGGOTA',
+        role: user.role,
         achievements: [
           { id: 1, title: 'TKK Menabung', date: '10 Mei 2026', icon: 'savings' },
           { id: 2, title: 'TKK Berkemah', date: '25 Mei 2026', icon: 'campground' }
@@ -140,20 +173,25 @@ const usersController = {
   // POST /api/users or /api/anggota
   createUser: async (req, res) => {
     try {
-      const { name, email, password, role, phone, regu, gugusDepan, nomorInduk } = req.body;
+      const { name, nama, email, password, role, phone, regu, rank, gugusDepan, nomorInduk, nisn, jabatan, status } = req.body;
 
-      if (!name || !email || !password || !role) {
-        return res.status(400).json({ success: false, message: 'name, email, password, and role are required', data: null });
+      const finalName = name || nama;
+      const finalEmail = email || (nisn ? `${nisn}@scoutify.com` : `user_${Date.now()}@scoutify.com`);
+      const finalPassword = password || 'Password123!';
+      const finalRole = role || 'SISWA';
+
+      if (!finalName) {
+        return res.status(400).json({ success: false, message: 'Nama lengkap wajib diisi', data: null });
       }
 
       if (!supabaseAdmin) {
         return res.status(500).json({ success: false, message: 'Server configuration error: Admin privileges not set', data: null });
       }
 
-      // 1. Create User via Admin API
+      // 1. Create User via Supabase Auth Admin API
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
+        email: finalEmail,
+        password: finalPassword,
         email_confirm: true
       });
 
@@ -168,13 +206,16 @@ const usersController = {
         .from('profiles')
         .insert([{
           id: userId,
-          name,
-          email,
+          name: finalName,
+          email: finalEmail,
           phone: phone || null,
           regu: regu || null,
+          rank: rank || 'Penggalang',
           gugus_depan: gugusDepan || null,
-          nomor_induk: nomorInduk || null,
-          role: role.toUpperCase(),
+          nomor_induk: nomorInduk || nisn || null,
+          role: finalRole.toUpperCase(),
+          jabatan: jabatan || rank || 'ANGGOTA',
+          is_active: status !== 'Non-aktif'
         }])
         .select()
         .single();
@@ -183,7 +224,7 @@ const usersController = {
         return res.status(500).json({ success: false, message: 'User created but failed to save profile: ' + profileError.message, data: null });
       }
 
-      await logAudit(req.user.sub, 'Create User', req.ip, `Created user ${email} with role ${role}`);
+      await logAudit(req.user.sub, 'Create User', req.ip, `Created user ${finalEmail} with role ${finalRole}`);
 
       return res.status(201).json({
         success: true,
@@ -204,18 +245,26 @@ const usersController = {
         return res.status(404).json({ success: false, message: 'User not found', data: null });
       }
 
-      const { name, phone, regu, rank, gugusDepan, nomorInduk, role } = req.body;
+      const { name, nama, phone, regu, rank, gugusDepan, nomorInduk, nisn, role, jabatan, status, isActive } = req.body;
 
       const updateData = {
         updated_at: new Date()
       };
-      if (name) updateData.name = name;
+      if (name || nama) updateData.name = name || nama;
       if (phone) updateData.phone = phone;
       if (regu) updateData.regu = regu;
       if (rank) updateData.rank = rank;
       if (gugusDepan) updateData.gugus_depan = gugusDepan;
-      if (nomorInduk) updateData.nomor_induk = nomorInduk;
+      if (nomorInduk || nisn) updateData.nomor_induk = nomorInduk || nisn;
       if (role) updateData.role = role.toUpperCase();
+      if (jabatan) updateData.jabatan = jabatan;
+      if (rank && !jabatan) updateData.jabatan = rank; // Sync fallback
+
+      if (status !== undefined) {
+        updateData.is_active = status === 'Aktif' || status === 'Online' || status === true;
+      } else if (isActive !== undefined) {
+        updateData.is_active = isActive === true;
+      }
 
       const { data, error } = await supabase
         .from('profiles')
