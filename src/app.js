@@ -21,7 +21,10 @@ const supabase = require('./config/supabaseClient');
 // Middleware dasar
 app.use(cors());
 app.use(express.json()); // Mem-parsing body request berbasis JSON
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+const isVercel = process.env.VERCEL || process.env.NOW_BUILDER;
+const uploadStaticDir = isVercel ? '/tmp' : path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadStaticDir));
 
 // Middleware untuk memvalidasi konfigurasi Supabase
 app.use((req, res, next) => {
